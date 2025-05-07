@@ -1,57 +1,132 @@
-import { ItemName, Offers, ShoppingBasket } from "../../src/ShoppingBasket";
+import { ItemName, ShoppingBasket, StaticPriceProvider, Buy1Get1, Buy2Get3, OfferFactory } from '../ShoppingBasket';
 
-describe('Offers', () => {
-    test('Buy1Get1 should apply buy-one-get-one-free logic', () => {
-        expect(Offers.Buy1Get1(0, 2, 50)).toBe(50);
-        expect(Offers.Buy1Get1(0, 3, 50)).toBe(100);
-        expect(Offers.Buy1Get1(0, 5, 50)).toBe(150);
+// PriceProvider tests
+describe('StaticPriceProvider', () => {
+    let priceProvider: StaticPriceProvider;
+
+    beforeEach(() => {
+        priceProvider = new StaticPriceProvider();
     });
 
-    test('Buy2Get3 should apply buy-two-get-three logic', () => {
-        expect(Offers.Buy2Get3(0, 3, 15)).toBe(30);
-        expect(Offers.Buy2Get3(0, 4, 15)).toBe(45);
-        expect(Offers.Buy2Get3(0, 6, 15)).toBe(60);
+    test('should return correct prices for items', () => {
+        expect(priceProvider.getPrice(ItemName.Apple)).toBe(35);
+        expect(priceProvider.getPrice(ItemName.Banana)).toBe(20);
+        expect(priceProvider.getPrice(ItemName.Melon)).toBe(50);
+        expect(priceProvider.getPrice(ItemName.Lime)).toBe(15);
     });
 });
 
+// Buy1Get1 offer tests
+describe('Buy1Get1 Offer', () => {
+    let offer: Buy1Get1;
+
+    beforeEach(() => {
+        offer = new Buy1Get1();
+    });
+
+    test('calculates price correctly for even count', () => {
+        expect(offer.apply(4, 50)).toBe(2 * 50); // 4 items, pay for 2
+    });
+
+    test('calculates price correctly for odd count', () => {
+        expect(offer.apply(5, 50)).toBe(3 * 50); // 5 items, pay for 3
+    });
+
+    test('calculates zero price for zero count', () => {
+        expect(offer.apply(0, 50)).toBe(0);
+    });
+});
+
+// Buy2Get3 offer tests
+describe('Buy2Get3 Offer', () => {
+    let offer: Buy2Get3;
+
+    beforeEach(() => {
+        offer = new Buy2Get3();
+    });
+
+    test('calculates price correctly for multiples of 3', () => {
+        expect(offer.apply(3, 15)).toBe(2 * 15); // 3 items, pay for 2
+        expect(offer.apply(6, 15)).toBe(4 * 15); // 6 items, pay for 4
+    });
+
+    test('calculates price correctly for non-multiples of 3', () => {
+        expect(offer.apply(4, 15)).toBe(2 * 15 + 1 * 15); // 3-for-2 + 1 normal = 3*price = 45
+        expect(offer.apply(5, 15)).toBe(4 * 15);           // 3-for-2 + 2 normal = 4*price = 60
+    });
+
+    test('calculates zero price for zero count', () => {
+        expect(offer.apply(0, 15)).toBe(0);
+    });
+});
+
+// OfferFactory tests
+describe('OfferFactory', () => {
+    test('returns Buy1Get1 for Melon', () => {
+        const offer = OfferFactory.getOffer(ItemName.Melon);
+        expect(offer).toBeInstanceOf(Buy1Get1);
+    });
+
+    test('returns Buy2Get3 for Lime', () => {
+        const offer = OfferFactory.getOffer(ItemName.Lime);
+        expect(offer).toBeInstanceOf(Buy2Get3);
+    });
+
+    test('returns null for items without offers', () => {
+        expect(OfferFactory.getOffer(ItemName.Apple)).toBeNull();
+        expect(OfferFactory.getOffer(ItemName.Banana)).toBeNull();
+    });
+});
+
+// ShoppingBasket integration tests
 describe('ShoppingBasket', () => {
-    test('should return 0 for an empty basket', () => {
-        const basket = new ShoppingBasket([]);
-        expect(basket.calculateTotalCost()).toBe(0);
+    let priceProvider: StaticPriceProvider;
+
+    beforeEach(() => {
+        priceProvider = new StaticPriceProvider();
     });
 
-    test('should correctly calculate cost without offers', () => {
-        const basket = new ShoppingBasket([
-            ItemName.Apple, ItemName.Banana
-        ]);
-        expect(basket.calculateTotalCost()).toBe(35 + 20);
+    test('calculates total cost without offers correctly', () => {
+        const basket = new ShoppingBasket(
+            [ItemName.Apple, ItemName.Banana],
+            priceProvider
+        );
+        const total = basket.calculateTotalCost();
+        expect(total).toBe(35 + 20);
     });
 
-    test('should apply Buy1Get1 offer on melons', () => {
-        const basket = new ShoppingBasket([
-            ItemName.Melon, ItemName.Melon
-        ]);
-        expect(basket.calculateTotalCost()).toBe(50); // one free
+    test('applies Buy1Get1 offer for Melons correctly', () => {
+        const basket = new ShoppingBasket(
+            [ItemName.Melon, ItemName.Melon, ItemName.Melon], // 3 melons
+            priceProvider
+        );
+        // 3 melons, pay 2 * 50 = 100
+        expect(basket.calculateTotalCost()).toBe(2 * 50);
     });
 
-    test('should apply Buy2Get3 offer on limes', () => {
-        const basket = new ShoppingBasket([
-            ItemName.Lime, ItemName.Lime, ItemName.Lime
-        ]);
-        expect(basket.calculateTotalCost()).toBe(30); // 3 for price of 2
+    test('applies Buy2Get3 offer for Limes correctly', () => {
+        const basket = new ShoppingBasket(
+            [ItemName.Lime, ItemName.Lime, ItemName.Lime, ItemName.Lime], // 4 limes
+            priceProvider
+        );
+        // 3 for price of 2 + 1 normal: 2*15 + 1*15 = 45
+        expect(basket.calculateTotalCost()).toBe(45);
     });
 
-    test('should calculate mixed basket correctly', () => {
-        const basket = new ShoppingBasket([
+    test('calculates total cost for mixed items correctly', () => {
+        const items = [
             ItemName.Apple, ItemName.Apple, ItemName.Banana,
             ItemName.Melon, ItemName.Melon,
             ItemName.Lime, ItemName.Lime, ItemName.Lime
-        ]);
-        // Apples: 2 * 35 = 70
-        // Banana: 1 * 20 = 20
-        // Melons Buy 1 get 1: 2 = 50
-        // Limes Buy 2 get 3: 3 = 30
-        const expectedTotal = 70 + 20 + 50 + 30;
-        expect(basket.calculateTotalCost()).toBe(expectedTotal);
+        ];
+        const basket = new ShoppingBasket(items, priceProvider);
+        /* Calculation:
+           Apple: 2 * 35 = 70
+           Banana: 1 * 20 = 20
+           Melon: 2 items, Buy1Get1 => pay for 1 * 50 = 50
+           Lime: 3 items, Buy2Get3 => pay for 2 * 15 = 30
+           Total: 70 + 20 + 50 + 30 = 170
+        */
+        expect(basket.calculateTotalCost()).toBe(170);
     });
 });

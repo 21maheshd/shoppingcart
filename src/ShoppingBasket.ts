@@ -4,33 +4,68 @@ export enum ItemName {
     Melon = "Melon",
     Lime = "Lime"
 }
-export class Offers {
-    static Buy1Get1(totalCost: number, count: number, price: number) {
-        totalCost += Math.floor(count / 2) * price;
-        totalCost += (count % 2) * price
-        return totalCost;
-    }
-    static Buy2Get3(totalCost: number, count: number, price: number) {
-        totalCost += Math.floor(count / 3) * 2 * price;
-        totalCost += (count % 3) * price
-        return totalCost;
-    }
+
+// PriceProvider interface for getting item prices
+interface PriceProvider {
+    getPrice(item: ItemName): number;
 }
 
-export class ShoppingBasket {
-    private items: ItemName[];
-
-    constructor(items: ItemName[]) {
-        this.items = items;
-        console.log('Added items', this.items);
-    }
-
-    private static prices: Record<ItemName, number> = {
+// implementation of PriceProvider
+export class StaticPriceProvider implements PriceProvider {
+    private prices: Record<ItemName, number> = {
         [ItemName.Apple]: 35,
         [ItemName.Banana]: 20,
         [ItemName.Melon]: 50,
         [ItemName.Lime]: 15
     };
+
+    getPrice(item: ItemName): number {
+        return this.prices[item];
+    }
+}
+
+// Offer interface
+interface Offer {
+    apply(count: number, price: number): number;
+}
+
+// implementation of Buy1Get1 offer
+export class Buy1Get1 implements Offer {
+    apply(count: number, price: number): number {
+        return Math.floor(count / 2) * price + (count % 2) * price;
+    }
+}
+
+// implementation of Buy2Get3 offer
+export class Buy2Get3 implements Offer {
+    apply(count: number, price: number): number {
+        return Math.floor(count / 3) * 2 * price + (count % 3) * price;
+    }
+}
+
+// OfferFactory to create offers based on item type
+export class OfferFactory {
+    static getOffer(item: ItemName): Offer | null {
+        switch (item) {
+            case ItemName.Melon:
+                return new Buy1Get1();
+            case ItemName.Lime:
+                return new Buy2Get3();
+            default:
+                return null;
+        }
+    }
+}
+
+export class ShoppingBasket {
+    private items: ItemName[];
+    private priceProvider: PriceProvider;
+
+    constructor(items: ItemName[], priceProvider: PriceProvider) {
+        this.items = items;
+        this.priceProvider = priceProvider;
+        console.log('Added items', this.items);
+    }
 
     public calculateTotalCost(): number {
         const itemCounts: Record<ItemName, number> = {} as Record<ItemName, number>;
@@ -43,19 +78,13 @@ export class ShoppingBasket {
 
         for (const item in itemCounts) {
             const count = itemCounts[item as ItemName];
+            const price = this.priceProvider.getPrice(item as ItemName);
+            const offer = OfferFactory.getOffer(item as ItemName);
 
-            switch (item as ItemName) {
-                case ItemName.Melon:
-                    console.log('Melons are available as buy one get one free')
-                    totalCost = Offers.Buy1Get1(totalCost, count, ShoppingBasket.prices[item as ItemName])
-                    break;
-                case ItemName.Lime:
-                    console.log('Limes are available in a three for the price of two offer')
-                    totalCost = Offers.Buy2Get3(totalCost, count, ShoppingBasket.prices[item as ItemName])
-                    break;
-                default:
-                    totalCost += count * ShoppingBasket.prices[item as ItemName];
-                    break;
+            if (offer) {
+                totalCost += offer.apply(count, price);
+            } else {
+                totalCost += count * price;
             }
         }
 
@@ -63,11 +92,12 @@ export class ShoppingBasket {
     }
 }
 
-
 // Calling functions
+const priceProvider = new StaticPriceProvider();
 const basket = new ShoppingBasket([
     ItemName.Apple, ItemName.Apple, ItemName.Banana,
     ItemName.Melon, ItemName.Melon,
     ItemName.Lime, ItemName.Lime, ItemName.Lime
-]);
+], priceProvider);
+
 console.log(`Total cost: ${basket.calculateTotalCost()}p`);
